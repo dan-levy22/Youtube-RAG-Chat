@@ -161,6 +161,7 @@ langchain==0.3.25
     # via
     #   -r requirements.in
     #   langchain-community
+    #   langchain-yt-dlp
 langchain-chroma==0.2.4
     # via -r requirements.in
 langchain-community==0.3.24
@@ -176,6 +177,8 @@ langchain-google-genai==2.1.5
     # via -r requirements.in
 langchain-text-splitters==0.3.8
     # via langchain
+langchain-yt-dlp==0.0.8
+    # via -r requirements.in
 langsmith==0.3.45
     # via
     #   langchain
@@ -307,6 +310,8 @@ protobuf==5.29.5
     #   opentelemetry-proto
     #   proto-plus
     #   streamlit
+psycopg2-binary==2.9.10
+    # via -r requirements.in
 pyarrow==20.0.0
     # via streamlit
 pyasn1==0.6.1
@@ -496,7 +501,9 @@ yarl==1.20.0
 youtube-transcript-api==1.0.3
     # via -r requirements.in
 yt-dlp==2025.5.22
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   langchain-yt-dlp
 zipp==3.22.0
     # via importlib-metadata
 zstandard==0.23.0

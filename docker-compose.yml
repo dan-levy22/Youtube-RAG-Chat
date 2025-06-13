@@ -15,6 +15,7 @@ services:
       CHROMA_PORT: 8000 # The internal port for Chroma
     depends_on:
       - chromadb # Ensures chromadb starts before the backend
+      - db       # Postgresql db
     volumes:
       - ./app:/code/app            # Mounts your local backend code into the container for live-reloading
       - ./config:/code/config  # Mounts the shared config into the backend
@@ -50,5 +51,21 @@ services:
     volumes:
       - chroma_data:/chroma/chroma
 
+  db:
+    image: postgres:16-alpine   # Use a standard, lightweight Postgres image
+    container_name: postgres_db
+    environment:
+      # Variables required by the postgres image to initialise
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+    # Optionally expose the port to the host machine for debugging
+      - "5432:5432"
+    volumes:
+      # This named volume ensures the postgres data is permanent
+      - postgres_data:/var/lib/postgresql/data
+
 volumes:
   chroma_data: # Defines the named volume for persistence
+  postgres_data: # Defines the named volume for persistence 

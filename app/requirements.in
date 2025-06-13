@@ -6,12 +6,14 @@ uvicorn[standard]
 
 # Database & Data Models
 sqlmodel
+psycopg2-binary # Postgres driver
 
 # LangChain & AI Components
 langchain-community
 langchain-google-genai
 langchain-chroma  # Wrapper for ChromaDB integration
 langchain
+langchain-yt-dlp    # Alternate langchain loader based on yt-dlp
 yt-dlp
 youtube-transcript-api
 pypdf             # For document processing, likely used by LangChain

@@ -23,10 +23,20 @@ from db.session import engine, get_session
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Before startup:
-    SQLModel.metadata.create_all(engine) # Create all tables
+     # This code runs on startup
+    print("--- Application starting up... ---")
+    print("Creating database tables...")
+    try:
+        # Create all tables based on your SQLModel models
+        SQLModel.metadata.create_all(engine)
+        print("Database tables created successfully.")
+    except Exception as e:
+        print(f"An error occurred while creating database tables: {e}")
+    
     yield
-    # After startup:
+    
+    # This code runs on shutdown
+    print("--- Application shutting down... ---")
 
 
 app = FastAPI(

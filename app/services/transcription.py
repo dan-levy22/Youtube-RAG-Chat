@@ -1,8 +1,10 @@
 import logging
 from urllib.parse import parse_qs, urlparse
+import traceback
 
 from langchain.schema import Document
-from langchain_community.document_loaders import YoutubeLoader
+from langchain_community.document_loaders import YoutubeLoader # Pytube-based 
+from langchain_yt_dlp.youtube_loader import YoutubeLoaderDL # New Package
 from sqlmodel import Session
 from yt_dlp import YoutubeDL  # for metadata
 
@@ -66,7 +68,7 @@ def get_transcript(video_url: str, db: Session) -> list[Document]:
     # Otherwise download transcript fresh:
 
     # Load transcript only
-    loader = YoutubeLoader.from_youtube_url(clean_url)
+    loader = YoutubeLoaderDL.from_youtube_url(youtube_url=clean_url, add_video_info = False)
     try:
         # Assuming you instantiate your LangChain loader like this:
         # from langchain_community.document_loaders import YoutubeLoader
@@ -89,10 +91,13 @@ def get_transcript(video_url: str, db: Session) -> list[Document]:
 
     except Exception as e: # Catch specific exceptions from youtube_transcript_api if known, or general Exception
         logger.error(f"Failed to load transcript using LangChain loader for URL {video_url} (video_id: {video_id}): {type(e).__name__} - {e}", exc_info=True)
+        print("!!! CAUGHT THE REAL LOADER ERROR !!!")
+        traceback.print_exc()
+        # raise ValueError(f"Underlying YoutubeLoader error: {e}") from e
         # Option 1: Re-raise a custom error that summarise_endpoint can catch and give a nice message
         # raise ValueError(f"Could not retrieve or process transcript for the video: {video_url}. Please check the URL or try another video.") from e
         # Option 2: Return an empty list and let downstream functions handle it
-        return []
+        return []     # TODO: uncomment this- for linting/ typing purposes
 
 
     # fetch video metadata via yt-dlp
@@ -115,6 +120,7 @@ def get_transcript(video_url: str, db: Session) -> list[Document]:
     # In case chunked documents returned, combine into one full transcript text
     full_text = "\n\n".join(doc.page_content for doc in docs)
     metadata = docs[0].metadata
+    print(metadata)
     title = metadata.get("title", f"Title not available for {video_id}")
     
     # Save the transcript to db

@@ -33,3 +33,9 @@ __pycache__/
 
 # Secret environment variables
 .env
+
+# YT transcript loader test scripts
+test_community_loader.py
+test_direct_dlp.py
+test_loader.py
+test_youtube_transcript.py

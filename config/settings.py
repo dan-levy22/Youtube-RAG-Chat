@@ -11,6 +11,8 @@ load_dotenv()
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", 8000))
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # --------- API Keys -----------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
+
