@@ -1,18 +1,32 @@
+# config/settings.py
 import os
-
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
-# Load .env file if it exists (for local, non-Docker development)
+# --- The Key Addition ---
+# This line will find the .env file in your project root and load its variables
+# into the environment, making them available to Pydantic below.
 load_dotenv()
+# ----------------------
 
-# --------- Shared Application Settings ------------
 
-# Read from environment, with sensible defaults for local development
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
-CHROMA_PORT = int(os.getenv("CHROMA_PORT", 8000))
-DATABASE_URL = os.getenv("DATABASE_URL")
+class Settings(BaseSettings):
+    # Variables that MUST be in the environment (or .env file)
+    DATABASE_URL: str
+    GEMINI_API_KEY: str
+    PROXY_URL: str | None = None
 
-# --------- API Keys -----------
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
+    # Variables with defaults that can be overridden
+    BACKEND_URL: str = "http://localhost:8000"
+    CHROMA_HOST: str = "localhost"
+    CHROMA_PORT: int = 8000
 
+    model_config = SettingsConfigDict(case_sensitive=True)
+
+
+@lru_cache()
+def get_settings():
+    return Settings()
+
+settings = get_settings()

@@ -84,7 +84,7 @@ def chat_endpoint(
         print(f"!!! A FATAL ERROR OCCURRED IN chat_endpoint: {e}", flush=True)
         
         # This will print the full, multi-line traceback we need to see
-        traceback.print_exc() 
+        # traceback.print_exc() 
         
         # Raise a proper HTTP error
         raise HTTPException(

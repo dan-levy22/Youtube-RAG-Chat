@@ -39,3 +39,4 @@ test_community_loader.py
 test_direct_dlp.py
 test_loader.py
 test_youtube_transcript.py
+check_config.py

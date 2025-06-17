@@ -10,12 +10,17 @@ services:
     ports:
       - "8000:8000" # Map host port 8000 to container port 8000
     environment:
+      DATABASE_URL: "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      PROXY_URL: ${PROXY_URL}
       # Pass the ChromaDB hostname & port to your backend- rest of variables taken from .env defaults
       CHROMA_HOST: chromadb
       CHROMA_PORT: 8000 # The internal port for Chroma
     depends_on:
-      - chromadb # Ensures chromadb starts before the backend
-      - db       # Postgresql db
+      chromadb: # Ensures chromadb starts before the backend
+        condition: service_started
+      db:      # Postgresql db
+        condition: service_healthy
     volumes:
       - ./app:/code/app            # Mounts your local backend code into the container for live-reloading
       - ./config:/code/config  # Mounts the shared config into the backend
@@ -65,6 +70,11 @@ services:
     volumes:
       # This named volume ensures the postgres data is permanent
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   chroma_data: # Defines the named volume for persistence

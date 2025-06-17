@@ -5,7 +5,7 @@ from chromadb import ClientAPI
 from langchain_chroma.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-from config import settings
+from config.settings import settings
 
 logger = logging.getLogger()
 

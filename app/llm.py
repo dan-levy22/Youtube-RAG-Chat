@@ -1,5 +1,5 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from config import settings
+from config.settings import settings
 
 _llm_instance = None # Private, module-level variable to hold the instance
 
