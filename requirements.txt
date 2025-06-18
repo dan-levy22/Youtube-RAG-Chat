@@ -107,6 +107,8 @@ grpcio==1.72.1
     #   opentelemetry-exporter-otlp-proto-grpc
 grpcio-status==1.71.0
     # via google-api-core
+gunicorn==23.0.0
+    # via -r requirements.in
 h11==0.16.0
     # via
     #   httpcore
@@ -274,6 +276,7 @@ packaging==24.2
     # via
     #   altair
     #   build
+    #   gunicorn
     #   huggingface-hub
     #   langchain-core
     #   langsmith

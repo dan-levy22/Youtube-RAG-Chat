@@ -3,6 +3,7 @@
 # Backend Framework & Server
 fastapi
 uvicorn[standard]
+gunicorn
 
 # Database & Data Models
 sqlmodel

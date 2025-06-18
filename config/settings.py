@@ -2,13 +2,17 @@
 import os
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from dotenv import load_dotenv
 
-# --- The Key Addition ---
-# This line will find the .env file in your project root and load its variables
-# into the environment, making them available to Pydantic below.
-load_dotenv()
-# ----------------------
+
+
+# Only try to load a .env file if we are in a local environment
+if os.getenv("EXECUTION_ENVIRONMENT") != "docker":
+    from dotenv import load_dotenv
+    print(">>> RUNNING IN LOCAL MODE: Loading .env.local file. <<<")
+    # This will now ONLY run when you execute the script on your Mac,
+    # because the EXECUTION_ENVIRONMENT variable won't be set.
+    load_dotenv(".env.local", override=True)
+# -------------------------------------------------------------------    
 
 
 class Settings(BaseSettings):

@@ -14,6 +14,7 @@ summary_cache/
 # trialling files
 chromadb-test.ipynb
 youtube_RAG.ipynb
+random_test_scripts/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -34,9 +35,16 @@ __pycache__/
 # Secret environment variables
 .env
 
+# Demo data backup
+demo_data_backup.sql
+
+# Original docker-compose
+docker-compose-OG.yml
+
 # YT transcript loader test scripts
 test_community_loader.py
 test_direct_dlp.py
 test_loader.py
 test_youtube_transcript.py
 check_config.py
+

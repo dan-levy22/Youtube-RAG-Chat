@@ -4,6 +4,7 @@
 fastapi
 uvicorn[standard]
 python-dotenv
+gunicorn
 
 # Database & Data Models
 sqlmodel
