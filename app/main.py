@@ -78,6 +78,10 @@ def get_past_conversations(
     final_response = PreviousConversationsResponse(conversations=conversation_items)
     return final_response
 
+@app.get("/health", status_code=200)
+def health_check():
+    """A simple endpoint to confirm the service is running."""
+    return {"status": "ok", "message": "Backend service is alive!"}
 
 if __name__ == "__main__":
     import uvicorn
