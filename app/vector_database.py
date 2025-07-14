@@ -5,13 +5,14 @@ from chromadb import ClientAPI
 from langchain_chroma.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-from config.settings import settings
+from config.settings import get_settings
 
 logger = logging.getLogger()
 
 # Initalise embedding function
 def get_embedding_function() -> GoogleGenerativeAIEmbeddings:
     
+    settings = get_settings()
     api_key = settings.GEMINI_API_KEY
     if not api_key:
         raise ValueError("GEMINI_API_KEY not found for embedding function. Please check your .env file.")

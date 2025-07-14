@@ -11,7 +11,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, SQLModel
+from sqlmodel import Session, SQLModel, create_engine
+
 
 from app.api.routers.chat import router as chat_router
 from app.api.routers.session import router as session_router
@@ -19,24 +20,40 @@ from app.api.routers.summary import router as summary_router
 from app.backend_schemas import PreviousConversationItem, PreviousConversationsResponse
 from db.crud import get_video_ids_and_titles_by_user_id
 from db.session import engine, get_session
+from config.settings import get_settings
+
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-     # This code runs on startup
+    #  # This code runs on startup
     print("--- Application starting up... ---")
-    print("Creating database tables...")
-    try:
-        # Create all tables based on your SQLModel models
-        SQLModel.metadata.create_all(engine)
-        print("Database tables created successfully.")
-    except Exception as e:
-        print(f"An error occurred while creating database tables: {e}")
+    # settings=get_settings()
+    # print("DB URL:", settings.DATABASE_URL)
+    # print("DB_USER:", settings.DB_USER)
+    # print("DB_PASSWORD", settings.DB_PASSWORD)
+    # print("DB_HOST", settings.DB_HOST)
+    # print("DB_PORT", settings.DB_PORT)
+    # print("DB_NAME", settings.DB_NAME)
+    # print("BACKEND_URL", settings.BACKEND_URL)
     
     yield
-    
-    # This code runs on shutdown
     print("--- Application shutting down... ---")
+    
+    # print("--- Lifespan startup: Creating database engine... ---")
+    # # print("Creating database tables...")
+    # # try:
+    # #     # Create all tables based on your SQLModel models
+    # #     SQLModel.metadata.create_all(engine)
+    # #     print("Database tables created successfully.")
+    # # except Exception as e:
+    # #     print(f"An error occurred while creating database tables: {e}")
+
+    # yield
+    
+    # # This code runs on shutdown
+    # print("--- Lifespan shutdown: Disposing of database engine... ---")
+    # app.state.db_engine.dispose()
 
 
 app = FastAPI(
