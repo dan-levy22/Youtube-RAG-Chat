@@ -2,8 +2,6 @@
 import os
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, computed_field
-from sqlalchemy import URL
 
 
 
@@ -18,16 +16,9 @@ if os.getenv("EXECUTION_ENVIRONMENT") != "docker":
 
 
 class Settings(BaseSettings):
-    # --- Required variables loaded from the environment ---
-    # Use repr=False to prevent secrets from being printed in logs
-    DB_USER: str
-    DB_PASSWORD: str = Field(repr=False)
-    DB_HOST: str
-    DB_PORT: int = 5432
-    DB_NAME: str
-    GEMINI_API_KEY: str = Field(repr=False)
-
-    # --- Optional variables ---
+    # Variables that MUST be in the environment (or .env file)
+    DATABASE_URL: str
+    GEMINI_API_KEY: str
     PROXY_URL: str | None = None
 
     # Variables with defaults that can be overridden
@@ -35,22 +26,6 @@ class Settings(BaseSettings):
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8000
 
-    # --- A computed field to build the database URL ---
-    @computed_field
-    @property
-    def DATABASE_URL(self) -> str:
-        # Using SQLAlchemy's URL object is robust, but a simple f-string also works
-        # return f"postgresql+psycopg2://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return str(URL.create(
-            drivername="postgresql+psycopg2",
-            username=self.DB_USER,
-            password=self.DB_PASSWORD,
-            host=self.DB_HOST,
-            port=self.DB_PORT,
-            database=self.DB_NAME,
-            query={"sslmode": "require"}
-        ))
-    
     model_config = SettingsConfigDict(case_sensitive=True)
 
 
@@ -58,4 +33,4 @@ class Settings(BaseSettings):
 def get_settings():
     return Settings()
 
-# settings = get_settings()
+settings = get_settings()

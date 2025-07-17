@@ -1,6 +1,6 @@
 # --- Stage 1: "Base" ---
 # Installs all dependencies needed for local dev and for testing.
-FROM python:3.12-slim AS base
+FROM python:3.12-slim as base
 
 WORKDIR /code
 
@@ -8,8 +8,8 @@ WORKDIR /code
 # This ensures that all top-level modules (app, config, db, shared) can be found.
 ENV PYTHONPATH=/code
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
 # Install uv, the fast installer
 RUN pip install uv
@@ -23,7 +23,7 @@ RUN uv pip install --no-cache-dir --system -r requirements.txt
 
 # --------------- Stage 2: "Production" ------------------
 # This is the final, lean stage for deployment.
-FROM base AS production
+FROM base as production
 
 # Copy your application code into the image.
 COPY ./app /code/app
@@ -33,18 +33,12 @@ COPY ./db /code/db
 
 EXPOSE 8000
 
-# # Set the command to run the app using the Gunicorn production server
-# CMD ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "-b", "0.0.0.0:8000"]
-
-# Temporary CMD for debugging. Remember to change it back after fixing the issue.
-# CMD ["sh", "-c", "echo 'Container is sleeping for 90 seconds for debugging...'; sleep 90; echo 'Starting Gunicorn...'; gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app -b 0.0.0.0:8000"]
-
-# Temporary CMD for debugging Uvicorn startup
-CMD ["sh", "-c", "echo 'Waiting 60s for secrets and networking to initialize...'; sleep 60; echo 'Starting Uvicorn...'; uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Set the command to run the app using the Gunicorn production server
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "-b", "0.0.0.0:8000"]
 
 
 # --------------- Stage 3: Development ------------------
-FROM base AS development
+FROM base as development
 
 # The default CMD for this stage is for local development
 CMD ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
@@ -52,7 +46,7 @@ CMD ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000
 
 # ------------- Stage 4: "Test"- linting addition needed -----------------
 # This stage builds on the 'development' stage to run tests in a CI/CD pipeline.
-FROM base AS test
+FROM base as test
 
 # Copy all the application and test code.
 # The `development` stage doesn't do this because it uses volumes.

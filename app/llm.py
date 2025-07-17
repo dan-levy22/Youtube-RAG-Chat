@@ -1,5 +1,5 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from config.settings import get_settings
+from config.settings import settings
 
 _llm_instance = None # Private, module-level variable to hold the instance
 
@@ -14,7 +14,6 @@ def get_llm() -> ChatGoogleGenerativeAI:
     if _llm_instance is None:
         print("--- Initializing LLM for the first time... ---")
         
-        settings = get_settings()
         api_key = settings.GEMINI_API_KEY
         if not api_key:
             raise ValueError(

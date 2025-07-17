@@ -3,11 +3,11 @@ import logging
 import requests
 import streamlit as st
 
-from config.settings import get_settings
+from config.settings import settings
 from shared.schemas import ChatResponse, SummaryResponse
 
 logger = logging.getLogger()
-settings = get_settings()
+
 API_BASE = f"{settings.BACKEND_URL}/api"
 
 @st.cache_resource

@@ -37,7 +37,6 @@ __pycache__/
 
 # Demo data backup
 demo_data_backup.sql
-.sql
 
 # Original docker-compose
 docker-compose-OG.yml

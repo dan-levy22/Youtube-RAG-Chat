@@ -1,5 +1,5 @@
 # --------- Stage 1: "Base" ----------
-FROM python:3.12-slim AS base
+FROM python:3.12-slim as base
 
 WORKDIR /code
 
@@ -19,7 +19,7 @@ RUN uv pip install --no-cache-dir --system -r requirements.txt
 # --------- Stage 2: "Production" ----------
 # Installs all dependencies needed for local dev and for testing
 # By inheriting from 'base', we already have Python, uv, and all dependencies installed.
-FROM base AS production
+FROM base as production
 
 # Copy only the frontend application code into the image.
 COPY ./frontend /code/frontend
@@ -33,7 +33,7 @@ CMD ["streamlit", "run", "frontend/frontend.py"]
 
 
 # ----------------- Stage 3: Development ----------------
-FROM base AS development 
+FROM base as development 
 
 # Note: relevant code is accessed through volumes in docker-compose 
 
