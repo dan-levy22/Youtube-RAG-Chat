@@ -11,7 +11,7 @@ from sqlmodel import Session
 
 from app.core.logging_setup import setup_logging
 from db.crud import load_transcript, save_transcript
-from config.settings import settings
+from config.settings import get_settings
 
 # Set up logger
 setup_logging()
@@ -53,6 +53,7 @@ def get_transcript(video_url: str, db: Session) -> list[Document]:
     """
     video_id = extract_video_id(video_url)
     clean_url = f"https://www.youtube.com/watch?v={video_id}"
+    settings = get_settings()
 
     # 1. Check for a cached version first.
     cache = load_transcript(db, video_id)

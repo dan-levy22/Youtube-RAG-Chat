@@ -34,7 +34,10 @@ COPY ./db /code/db
 EXPOSE 8000
 
 # Set the command to run the app using the Gunicorn production server
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "-b", "0.0.0.0:8000"]
+# CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "-b", "0.0.0.0:8000"]
+
+# Test using uvicorn first
+CMD ["sh", "-c", "echo 'Waiting for secret initialization...'"; "sleep 15"; "uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
 
 
 # --------------- Stage 3: Development ------------------

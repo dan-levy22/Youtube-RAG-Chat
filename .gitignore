@@ -7,6 +7,7 @@
 
 # vector db
 chess_chroma_db/
+*.sqlite3
 
 transcript_cache/
 summary_cache/
@@ -20,6 +21,9 @@ random_test_scripts/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Binary files
+*.bin
 
 
 # log files
@@ -38,6 +42,9 @@ __pycache__/
 # Demo data backup
 demo_data_backup.sql
 
+# Updated demo data backup
+rds_backup.sql
+
 # Original docker-compose
 docker-compose-OG.yml
 
@@ -48,3 +55,12 @@ test_loader.py
 test_youtube_transcript.py
 check_config.py
 
+# Git diff
+broken-commit.txt
+
+# Test scripts
+debug_settings.py
+
+# Print codebase
+print_files.py
+python_repo_for_llm.txt

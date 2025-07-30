@@ -6,17 +6,18 @@ services:
       context: .
       dockerfile: ./app/Dockerfile
       target: production
-    env_file:
+    env_file: # PHASE 2 (Service-level)
       - .env
     container_name: backend
     # Note: No ports are exposed to the host by default in production.
     # This would typically be handled by a reverse proxy like Nginx.
     environment:
       - EXECUTION_ENVIRONMENT=docker
-      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - PROXY_URL=${PROXY_URL}
-      - CHROMA_HOST=chromadb
+      - DB_HOST=db
+      # - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # - PROXY_URL=${PROXY_URL}
+      # - CHROMA_HOST=chromadb
     depends_on:
       db:
         condition: service_healthy
@@ -44,14 +45,15 @@ services:
   db:
     image: postgres:16-alpine
     container_name: postgres_db
+    env_file: .env
     environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5

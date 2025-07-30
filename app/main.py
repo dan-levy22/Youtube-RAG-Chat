@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, SQLModel
+from sqlalchemy import text
 
 from app.api.routers.chat import router as chat_router
 from app.api.routers.session import router as session_router
@@ -25,18 +26,19 @@ from db.session import engine, get_session
 async def lifespan(app: FastAPI):
      # This code runs on startup
     print("--- Application starting up... ---")
-    print("Creating database tables...")
-    try:
-        # Create all tables based on your SQLModel models
-        SQLModel.metadata.create_all(engine)
-        print("Database tables created successfully.")
-    except Exception as e:
-        print(f"An error occurred while creating database tables: {e}")
+
+    # No database operations here!
     
     yield
     
     # This code runs on shutdown
     print("--- Application shutting down... ---")
+
+    # Dispose database engine if it exists
+    if engine is not None:
+        logger.info("Disposing database engine...")
+        engine.dispose()
+        logger.info("Database engine disposed")
 
 
 app = FastAPI(
@@ -79,9 +81,19 @@ def get_past_conversations(
     return final_response
 
 @app.get("/health", status_code=200)
-def health_check():
-    """A simple endpoint to confirm the service is running."""
-    return {"status": "ok", "message": "Backend service is alive!"}
+def health_check(db: Session = Depends(get_session)):
+    # """A simple endpoint to confirm the service is running."""
+    # return {"status": "ok", "message": "Backend service is alive!"}
+    """Comprehensive health check with DB verification"""
+    try:
+        db.exec(text("SELECT 1"))
+        db_status= "connected"
+    except Exception as e:
+        db_status = f"unavailable: {str(e)}"
+    return {
+        "status": "ok",
+        "services": {"database": db_status}
+    }
 
 if __name__ == "__main__":
     import uvicorn

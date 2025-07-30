@@ -8,6 +8,8 @@ services:
       target: development
     ports:
       - "8000:8000" # Expose the backend port for local testing
+    environment:
+      - DB_HOST=localhost
     volumes:
       - ./app:/code/app            # Mount local code for live-reloading
       - ./config:/code/config
@@ -17,6 +19,8 @@ services:
     # command: ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--reload", "-b", "0.0.0.0:8000"]
 
   frontend:
+    environment:
+      - BACKEND_URL= http://localhost:8000
     volumes:
       - ./frontend:/code/frontend # Mount local code for live-reloading
       - ./config:/code/frontend/config
