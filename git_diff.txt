@@ -1,0 +1,1095 @@
+diff --git a/app/Dockerfile b/app/Dockerfile
+index 960c854..8abc048 100644
+--- a/app/Dockerfile
++++ b/app/Dockerfile
+@@ -30,6 +30,7 @@ COPY ./app /code/app
+ COPY ./config /code/config
+ COPY ./shared /code/shared
+ COPY ./db /code/db
++COPY ./create_tables.py /code
+ 
+ EXPOSE 8000
+ 
+@@ -37,7 +38,8 @@ EXPOSE 8000
+ # CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "-b", "0.0.0.0:8000"]
+ 
+ # Test using uvicorn first
+-CMD ["sh", "-c", "echo 'Waiting for secret initialization...'"; "sleep 15"; "uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
++# CMD ["sh", "-c", "echo 'Waiting for secret initialization...'"; "sleep 15"; "uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
++CMD ["sh","-c","echo 'Waiting for secret initialization…' && sleep 10 && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+ 
+ 
+ # --------------- Stage 3: Development ------------------
+diff --git a/app/main.py b/app/main.py
+index 106d4b9..e93b6b7 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -80,20 +80,34 @@ def get_past_conversations(
+     final_response = PreviousConversationsResponse(conversations=conversation_items)
+     return final_response
+ 
++# @app.get("/health", status_code=200)
++# def health_check(db: Session = Depends(get_session)):
++#     # """A simple endpoint to confirm the service is running."""
++#     # return {"status": "ok", "message": "Backend service is alive!"}
++#     """Comprehensive health check with DB verification"""
++#     try:
++#         db.exec(text("SELECT 1"))
++#         db_status= "connected"
++#     except Exception as e:
++#         db_status = f"unavailable: {str(e)}"
++#     return {
++#         "status": "ok",
++#         "services": {"database": db_status}
++#     }
++
+ @app.get("/health", status_code=200)
+-def health_check(db: Session = Depends(get_session)):
++def health_check():
+     # """A simple endpoint to confirm the service is running."""
+-    # return {"status": "ok", "message": "Backend service is alive!"}
+-    """Comprehensive health check with DB verification"""
++    return {"status": "ok"}
++
++@app.get("/db_health", status_code=200)
++def db_health_check(db: Session = Depends(get_session)):
+     try:
+         db.exec(text("SELECT 1"))
+         db_status= "connected"
+     except Exception as e:
+         db_status = f"unavailable: {str(e)}"
+-    return {
+-        "status": "ok",
+-        "services": {"database": db_status}
+-    }
++    return {"db_status": db_status}
+ 
+ if __name__ == "__main__":
+     import uvicorn
+diff --git a/copilot/.workspace b/copilot/.workspace
+new file mode 100644
+index 0000000..8cac343
+--- /dev/null
++++ b/copilot/.workspace
+@@ -0,0 +1 @@
++application: youtube-rag-chat
+diff --git a/copilot/api/manifest.yml b/copilot/api/manifest.yml
+new file mode 100644
+index 0000000..5a49670
+--- /dev/null
++++ b/copilot/api/manifest.yml
+@@ -0,0 +1,80 @@
++name: api
++type: Load Balanced Web Service
++
++image:
++  build:
++    dockerfile: app/Dockerfile
++    context: .
++    target: production
++  port: 8000
++
++# If your image supports ARM, uncomment the next line to save costs:
++# platform: linux/arm64
++# Otherwise keep x86_64:
++platform: linux/x86_64
++
++http:
++  path: "/"
++  healthcheck:
++    path: "/health"        # keep this lightweight (no DB)
++    grace_period: 40s       # bump to 30–60s if your app boots slower
++    interval: 10s
++    timeout: 5s
++    healthy_threshold: 2
++    unhealthy_threshold: 3
++  # redirect_to_https: true  # default is true; keep it that way
++
++cpu: 256
++memory: 512
++
++count:
++  range: 1-2                # min=1 for availability; max=2 for spikes
++  cooldown:
++    in: 60
++    out: 60
++  cpu_percentage: 70
++  memory_percentage: 95
++
++
++exec: true
++network:
++  connect: true             # service-to-service (Cloud Map / Service Connect)
++
++deployment:
++  circuit_breaker:
++    enable: true
++    rollback: true
++  rollback_alarms:          # keep if you’ve verified these names in CloudWatch
++    cpu_utilization: 70
++    memory_utilization: 95
++
++variables:
++  DB_HOST:
++    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBHost
++  DB_PORT:
++    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBPort
++  DB_NAME:
++    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBName
++  GEMINI_API_KEY: AIzaSyCE2CQCj5E8Ozbau9uwdTwJFyoNLXu0pMs
++  PROXY_URL: http://spoj2y7udg:mKWn2e~qhkHX6uql27@gate.decodo.com:7000
++  CHROMA_HOST: localhost
++  CHROMA_PORT: 8001
++
++secrets:
++  DB_USER:
++    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBUserSecretRef
++  DB_PASSWORD:
++    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBPasswordSecretRef
++
++# Per‑environment overrides (optional)
++# environments:
++#   staging:
++#     cpu: 256
++#     memory: 512
++#     count:
++#       range: 1-1
++#   prod:
++#     cpu: 512
++#     memory: 1024
++#     count:
++#       range: 2-4
+diff --git a/copilot/environments/addons/rds-postgres.yml b/copilot/environments/addons/rds-postgres.yml
+new file mode 100644
+index 0000000..0d98765
+--- /dev/null
++++ b/copilot/environments/addons/rds-postgres.yml
+@@ -0,0 +1,126 @@
++# Environment-level RDS Postgres (free-tier friendly)
++# Deploy with: copilot env deploy -n <env>
++
++Parameters:
++  App:
++    Type: String
++    Description: Copilot application name
++  Env:
++    Type: String
++    Description: Copilot environment name
++
++Mappings: {}
++Conditions:
++  IsProd: !Equals [!Ref Env, "prod"]
++
++Resources:
++  # Security group on the DB that only allows traffic from the Environment SG
++  DBInstanceSG:
++    Type: AWS::EC2::SecurityGroup
++    Properties:
++      GroupDescription: !Sub "RDS access for ${App}/${Env} services"
++      VpcId:
++        Fn::ImportValue: !Sub "${App}-${Env}-VpcId"
++      Tags:
++        - Key: copilot-application
++          Value: !Ref App
++        - Key: copilot-environment
++          Value: !Ref Env
++
++  DBIngressFromEnvSG:
++    Type: AWS::EC2::SecurityGroupIngress
++    Properties:
++      GroupId: !Ref DBInstanceSG
++      IpProtocol: tcp
++      FromPort: 5432
++      ToPort: 5432
++      SourceSecurityGroupId:
++        Fn::ImportValue: !Sub "${App}-${Env}-EnvironmentSecurityGroup"
++
++  # Subnet group built from the Copilot environment's private subnets
++  DBSubnetGroup:
++    Type: AWS::RDS::DBSubnetGroup
++    Properties:
++      DBSubnetGroupDescription: !Sub "Private subnets for ${App}/${Env} RDS"
++      SubnetIds:
++        Fn::Split:
++          - ","
++          - Fn::ImportValue: !Sub "${App}-${Env}-PrivateSubnets"
++      Tags:
++        - Key: copilot-application
++          Value: !Ref App
++        - Key: copilot-environment
++          Value: !Ref Env
++
++  # Credentials secret (username fixed; password generated)
++  DBCredentials:
++    Type: AWS::SecretsManager::Secret
++    Properties:
++      Name: !Sub "${App}-${Env}-rds-credentials"
++      Description: !Sub "Master credentials for ${App}/${Env} Postgres"
++      GenerateSecretString:
++        SecretStringTemplate: '{"username":"appuser"}'
++        GenerateStringKey: password
++        ExcludePunctuation: true
++      Tags:
++        - Key: copilot-application
++          Value: !Ref App
++        - Key: copilot-environment
++          Value: !Ref Env
++
++  # Small, single-AZ Postgres instance
++  DBInstance:
++    Type: AWS::RDS::DBInstance
++    Properties:
++      DBInstanceIdentifier: !Sub "${App}-${Env}-pg"
++      Engine: postgres
++      # EngineVersion: '15'          # (optional: pin a version)
++      DBInstanceClass: db.t4g.micro  # free-tier–sized
++      AllocatedStorage: 20           # free-tier storage size
++      StorageType: gp2
++      PubliclyAccessible: false
++      MultiAZ: false
++      AutoMinorVersionUpgrade: true
++      DeletionProtection: !If [IsProd, true, false]
++      BackupRetentionPeriod: !If [IsProd, 7, 1]
++      VPCSecurityGroups:
++        - !Ref DBInstanceSG
++      DBSubnetGroupName: !Ref DBSubnetGroup
++      # Create an initial DB schema name you’ll export as DB_NAME:
++      DBName: rag_db
++      MasterUsername: !Sub '{{resolve:secretsmanager:${DBCredentials}:SecretString:username}}'
++      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DBCredentials}:SecretString:password}}'
++      CopyTagsToSnapshot: true
++      Tags:
++        - Key: copilot-application
++          Value: !Ref App
++        - Key: copilot-environment
++          Value: !Ref Env
++
++Outputs:
++  # Values you’ll import in service manifests via "from_cfn"
++  DBHost:
++    Value: !GetAtt DBInstance.Endpoint.Address
++    Export:
++      Name: !Sub "${App}-${Env}-DBHost"
++
++  DBPort:
++    Value: !GetAtt DBInstance.Endpoint.Port
++    Export:
++      Name: !Sub "${App}-${Env}-DBPort"
++
++  DBName:
++    Value: rag_db
++    Export:
++      Name: !Sub "${App}-${Env}-DBName"
++
++  # Pre-baked secret references that target JSON keys (works nicely with "secrets.from_cfn")
++  DBUserSecretRef:
++    Value: !Sub "${DBCredentials}:username::"
++    Export:
++      Name: !Sub "${App}-${Env}-DBUserSecretRef"
++
++  DBPasswordSecretRef:
++    Value: !Sub "${DBCredentials}:password::"
++    Export:
++      Name: !Sub "${App}-${Env}-DBPasswordSecretRef"
+diff --git a/copilot/environments/staging/manifest.yml b/copilot/environments/staging/manifest.yml
+new file mode 100644
+index 0000000..4326453
+--- /dev/null
++++ b/copilot/environments/staging/manifest.yml
+@@ -0,0 +1,21 @@
++# The manifest for the "staging" environment.
++# Read the full specification for the "Environment" type at:
++#  https://aws.github.io/copilot-cli/docs/manifest/environment/
++
++# Your environment name will be used in naming your resources like VPC, cluster, etc.
++name: staging
++type: Environment
++
++# Import your own VPC and subnets or configure how they should be created.
++# network:
++#   vpc:
++#     id:
++
++# Configure the load balancers in your environment, once created.
++# http:
++#   public:
++#   private:
++
++# Configure observability for your environment resources.
++observability:
++  container_insights: false
+diff --git a/create_tables.py b/create_tables.py
+new file mode 100644
+index 0000000..3a0ba6d
+--- /dev/null
++++ b/create_tables.py
+@@ -0,0 +1,26 @@
++# In create_tables.py
++from sqlmodel import SQLModel, create_engine
++from sqlalchemy import inspect
++import os
++# Import from our new, isolated config file
++from config.settings import get_settings
++
++settings = get_settings()
++DATABASE_URL = settings.DATABASE_URL
++
++# IMPORTANT: Import all your SQLModel table models here
++from db.models import *
++
++print("--- Connecting to database to create tables ---")
++pwd = os.getenv("DB_PASSWORD", "")
++safe_url = DATABASE_URL.replace(pwd, "***") if pwd else DATABASE_URL
++print(f"DATABASE_URL used: {DATABASE_URL.replace(os.getenv('DB_PASSWORD'), '***')}") # Hide password in log
++
++try:
++    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
++    SQLModel.metadata.create_all(engine)
++    print("✅ Tables created successfully!")
++    print("Tables now present:", inspect(engine).get_table_names())
++except Exception as e:
++    print("❌ An error occurred while creating tables:")
++    print(e)
+\ No newline at end of file
+diff --git a/out/api-staging.params.json b/out/api-staging.params.json
+new file mode 100644
+index 0000000..b843ff3
+--- /dev/null
++++ b/out/api-staging.params.json
+@@ -0,0 +1,26 @@
++{
++  "Parameters": {
++    "AddonsTemplateURL": "",
++    "AppName": "youtube-rag-chat",
++    "ArtifactKeyARN": "arn:aws:kms:eu-west-2:253108853617:key/19b144f0-ed4c-4c4c-a7bd-2477e79c2d7e",
++    "ContainerImage": "",
++    "ContainerPort": "8000",
++    "DNSDelegated": "false",
++    "EnvFileARN": "",
++    "EnvName": "staging",
++    "HTTPSEnabled": "false",
++    "LogRetention": "30",
++    "RulePath": "/",
++    "TargetContainer": "api",
++    "TargetPort": "8000",
++    "TaskCPU": "256",
++    "TaskCount": "1",
++    "TaskMemory": "512",
++    "WorkloadName": "api"
++  },
++  "Tags": {
++    "copilot-application": "youtube-rag-chat",
++    "copilot-environment": "staging",
++    "copilot-service": "api"
++  }
++}
+\ No newline at end of file
+diff --git a/out/api-staging.stack.yml b/out/api-staging.stack.yml
+new file mode 100644
+index 0000000..3a1eeaf
+--- /dev/null
++++ b/out/api-staging.stack.yml
+@@ -0,0 +1,703 @@
++# Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
++# SPDX-License-Identifier: MIT-0
++AWSTemplateFormatVersion: 2010-09-09
++Description: CloudFormation template that represents a load balanced web service on Amazon ECS.
++Metadata:
++  Version: v1.34.1
++  Manifest: |
++    name: api
++    type: Load Balanced Web Service
++    image:
++      build:
++        dockerfile: app/Dockerfile
++        context: .
++        target: production
++      port: 8000
++    # If your image supports ARM, uncomment the next line to save costs:
++    # platform: linux/arm64
++    # Otherwise keep x86_64:
++    platform: linux/x86_64
++    http:
++      path: "/"
++      healthcheck:
++        path: "/health" # keep this lightweight (no DB)
++        grace_period: 40s # bump to 30–60s if your app boots slower
++        interval: 10s
++        timeout: 5s
++        healthy_threshold: 2
++        unhealthy_threshold: 3
++      # redirect_to_https: true  # default is true; keep it that way
++    cpu: 256
++    memory: 512
++    count:
++      range: 1-2 # min=1 for availability; max=2 for spikes
++      cooldown:
++        in: 60
++        out: 60
++      cpu_percentage: 70
++      memory_percentage: 95
++    exec: true
++    network:
++      connect: true # service-to-service (Cloud Map / Service Connect)
++    deployment:
++      circuit_breaker:
++        enable: true
++        rollback: true
++      rollback_alarms: # keep if you’ve verified these names in CloudWatch
++        cpu_utilization: 70
++        memory_utilization: 95
++    variables:
++      DB_HOST:
++        from_cfn: youtube-rag-chat-staging-DBHost
++      DB_PORT:
++        from_cfn: youtube-rag-chat-staging-DBPort
++      DB_NAME:
++        from_cfn: youtube-rag-chat-staging-DBName
++    secrets:
++      DB_USER:
++        from_cfn: youtube-rag-chat-staging-DBUserSecretRef
++      DB_PASSWORD:
++        from_cfn: youtube-rag-chat-staging-DBPasswordSecretRef
++
++    # Per‑environment overrides (optional)
++    # environments:
++    #   staging:
++    #     cpu: 256
++    #     memory: 512
++    #     count:
++    #       range: 1-1
++    #   prod:
++    #     cpu: 512
++    #     memory: 1024
++    #     count:
++    #       range: 2-4
++Parameters:
++  AppName:
++    Type: String
++  EnvName:
++    Type: String
++  WorkloadName:
++    Type: String
++  ContainerImage:
++    Type: String
++  ContainerPort:
++    Type: Number
++  TaskCPU:
++    Type: String
++  TaskMemory:
++    Type: String
++  TaskCount:
++    Type: Number
++  DNSDelegated:
++    Type: String
++    AllowedValues: [true, false]
++  LogRetention:
++    Type: Number
++  AddonsTemplateURL:
++    Description: 'URL of the addons nested stack template within the S3 bucket.'
++    Type: String
++    Default: ""
++  EnvFileARN:
++    Description: 'URL of the environment file.'
++    Type: String
++    Default: ""
++  ArtifactKeyARN:
++    Type: String
++    Description: 'KMS Key used for encrypting artifacts'
++  TargetContainer:
++    Type: String
++  TargetPort:
++    Type: Number
++  HTTPSEnabled:
++    Type: String
++    AllowedValues: [true, false]
++  RulePath:
++    Type: String
++Conditions:
++  IsGovCloud: !Equals [!Ref "AWS::Partition", "aws-us-gov"]
++  HasAssociatedDomain: !Equals [!Ref DNSDelegated, true]
++  HasAddons: !Not [!Equals [!Ref AddonsTemplateURL, ""]]
++  HasEnvFile: !Not [!Equals [!Ref EnvFileARN, ""]]
++Resources: # If a bucket URL is specified, that means the template exists.
++  LogGroup:
++    Metadata:
++      'aws:copilot:description': 'A CloudWatch log group to hold your service logs'
++    Type: AWS::Logs::LogGroup
++    Properties:
++      LogGroupName: !Join ['', [/copilot/, !Ref AppName, '-', !Ref EnvName, '-', !Ref WorkloadName]]
++      RetentionInDays: !Ref LogRetention
++  TaskDefinition:
++    Metadata:
++      'aws:copilot:description': 'An ECS task definition to group your containers and run them on ECS'
++    Type: AWS::ECS::TaskDefinition
++    DependsOn: LogGroup
++    Properties:
++      Family: !Join ['', [!Ref AppName, '-', !Ref EnvName, '-', !Ref WorkloadName]]
++      NetworkMode: awsvpc
++      RequiresCompatibilities:
++        - FARGATE
++      Cpu: !Ref TaskCPU
++      Memory: !Ref TaskMemory
++      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
++      TaskRoleArn: !GetAtt TaskRole.Arn
++      ContainerDefinitions:
++        - Name: !Ref WorkloadName
++          Image: !Ref ContainerImage
++          Secrets:
++            - Name: DB_PASSWORD
++              ValueFrom:
++                Fn::ImportValue: "youtube-rag-chat-staging-DBPasswordSecretRef"
++            - Name: DB_USER
++              ValueFrom:
++                Fn::ImportValue: "youtube-rag-chat-staging-DBUserSecretRef"
++          Environment:
++            - Name: COPILOT_APPLICATION_NAME
++              Value: !Sub '${AppName}'
++            - Name: COPILOT_SERVICE_DISCOVERY_ENDPOINT
++              Value: staging.youtube-rag-chat.local
++            - Name: COPILOT_ENVIRONMENT_NAME
++              Value: !Sub '${EnvName}'
++            - Name: COPILOT_SERVICE_NAME
++              Value: !Sub '${WorkloadName}'
++            - Name: COPILOT_LB_DNS
++              Value: !GetAtt EnvControllerAction.PublicLoadBalancerDNSName
++            - Name: DB_HOST
++              Value:
++                Fn::ImportValue: "youtube-rag-chat-staging-DBHost"
++            - Name: DB_NAME
++              Value:
++                Fn::ImportValue: "youtube-rag-chat-staging-DBName"
++            - Name: DB_PORT
++              Value:
++                Fn::ImportValue: "youtube-rag-chat-staging-DBPort"
++          EnvironmentFiles:
++            - !If
++              - HasEnvFile
++              - Type: s3
++                Value: !Ref EnvFileARN
++              - !Ref AWS::NoValue
++          LogConfiguration:
++            LogDriver: awslogs
++            Options:
++              awslogs-region: !Ref AWS::Region
++              awslogs-group: !Ref LogGroup
++              awslogs-stream-prefix: copilot
++          PortMappings:
++            - ContainerPort: 8000
++              Protocol: tcp
++              Name: target
++  ExecutionRole:
++    Metadata:
++      'aws:copilot:description': 'An IAM Role for the Fargate agent to make AWS API calls on your behalf'
++    Type: AWS::IAM::Role
++    Properties:
++      AssumeRolePolicyDocument:
++        Version: '2012-10-17'
++        Statement:
++          - Effect: Allow
++            Principal:
++              Service: ecs-tasks.amazonaws.com
++            Action: 'sts:AssumeRole'
++      Policies:
++        - PolicyName: !Join ['', [!Ref AppName, '-', !Ref EnvName, '-', !Ref WorkloadName, SecretsPolicy]]
++          PolicyDocument:
++            Version: '2012-10-17'
++            Statement:
++              - Effect: 'Allow'
++                Action:
++                  - 'ssm:GetParameters'
++                Resource:
++                  - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*'
++                Condition:
++                  StringEquals:
++                    'ssm:ResourceTag/copilot-application': !Sub '${AppName}'
++                    'ssm:ResourceTag/copilot-environment': !Sub '${EnvName}'
++              - Effect: 'Allow'
++                Action:
++                  - 'secretsmanager:GetSecretValue'
++                Resource:
++                  - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*'
++                Condition:
++                  StringEquals:
++                    'secretsmanager:ResourceTag/copilot-application': !Sub '${AppName}'
++                    'secretsmanager:ResourceTag/copilot-environment': !Sub '${EnvName}'
++              - Effect: 'Allow'
++                Action:
++                  - 'kms:Decrypt'
++                Resource:
++                  - !Ref ArtifactKeyARN
++              - Sid: DecryptTaggedKMSKey
++                Effect: 'Allow'
++                Action:
++                  - 'kms:Decrypt'
++                Resource:
++                  - !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'
++                Condition:
++                  StringEquals:
++                    'aws:ResourceTag/copilot-application': !Sub '${AppName}'
++                    'aws:ResourceTag/copilot-environment': !Sub '${EnvName}'
++        - !If
++          # Optional IAM permission required by ECS task def env file
++          # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/taskdef-envfiles.html#taskdef-envfiles-iam
++          # Example EnvFileARN: arn:aws:s3:::stackset-demo-infrastruc-pipelinebuiltartifactbuc-11dj7ctf52wyf/manual/1638391936/env
++          - HasEnvFile
++          - PolicyName: !Join ['', [!Ref AppName, '-', !Ref EnvName, '-', !Ref WorkloadName, GetEnvFilePolicy]]
++            PolicyDocument:
++              Version: '2012-10-17'
++              Statement:
++                - Effect: 'Allow'
++                  Action:
++                    - 's3:GetObject'
++                  Resource:
++                    - !Ref EnvFileARN
++                - Effect: 'Allow'
++                  Action:
++                    - 's3:GetBucketLocation'
++                  Resource:
++                    - !Join
++                      - ''
++                      - - 'arn:'
++                        - !Ref AWS::Partition
++                        - ':s3:::'
++                        - !Select [0, !Split ['/', !Select [5, !Split [':', !Ref EnvFileARN]]]]
++          - !Ref AWS::NoValue
++      ManagedPolicyArns:
++        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
++  TaskRole:
++    Metadata:
++      'aws:copilot:description': 'An IAM role to control permissions for the containers in your tasks'
++    Type: AWS::IAM::Role
++    Properties:
++      AssumeRolePolicyDocument:
++        Version: '2012-10-17'
++        Statement:
++          - Effect: Allow
++            Principal:
++              Service: ecs-tasks.amazonaws.com
++            Action: 'sts:AssumeRole'
++      Policies:
++        - PolicyName: 'DenyIAM'
++          PolicyDocument:
++            Version: '2012-10-17'
++            Statement:
++              - Effect: 'Deny'
++                Action: 'iam:*'
++                Resource: '*'
++        - PolicyName: 'ExecuteCommand'
++          PolicyDocument:
++            Version: '2012-10-17'
++            Statement:
++              - Effect: 'Allow'
++                Action: ["ssmmessages:CreateControlChannel", "ssmmessages:OpenControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenDataChannel"]
++                Resource: "*"
++              - Effect: 'Allow'
++                Action: ["logs:CreateLogStream", "logs:DescribeLogGroups", "logs:DescribeLogStreams", "logs:PutLogEvents"]
++                Resource: "*"
++  DiscoveryService:
++    Metadata:
++      'aws:copilot:description': 'Service discovery for your services to communicate within the VPC'
++    Type: AWS::ServiceDiscovery::Service
++    Properties:
++      Description: Discovery Service for the Copilot services
++      DnsConfig:
++        RoutingPolicy: MULTIVALUE
++        DnsRecords:
++          - TTL: 10
++            Type: A
++          - TTL: 10
++            Type: SRV
++      HealthCheckCustomConfig:
++        FailureThreshold: 1
++      Name: !Ref WorkloadName
++      NamespaceId:
++        Fn::ImportValue: !Sub '${AppName}-${EnvName}-ServiceDiscoveryNamespaceID'
++  DynamicDesiredCountAction:
++    Metadata:
++      'aws:copilot:description': "A custom resource returning the ECS service's running task count"
++    Type: Custom::DynamicDesiredCountFunction
++    Properties:
++      ServiceToken: !GetAtt DynamicDesiredCountFunction.Arn
++      Cluster:
++        Fn::ImportValue: !Sub '${AppName}-${EnvName}-ClusterId'
++      App: !Ref AppName
++      Env: !Ref EnvName
++      Svc: !Ref WorkloadName
++      DefaultDesiredCount: !Ref TaskCount
++      # We need to force trigger this lambda function on all deployments, so we give it a random ID as input on all event types.
++      UpdateID: 5d2f0c50-4f58-480c-9b81-37a6cc1e9c69
++  DynamicDesiredCountFunction:
++    Type: AWS::Lambda::Function
++    Properties:
++      Code:
++        S3Bucket: stackset-youtube-rag-chat-pipelinebuiltartifactbuc-dj0prcniywcp
++        S3Key: manual/scripts/custom-resources/dynamicdesiredcountfunction/ca480d1f6f1450b2744e6db30d2e850356f501478e0c258065a5ff884ababa58.zip
++      Handler: "index.handler"
++      Timeout: 600
++      MemorySize: 512
++      Role: !GetAtt 'DynamicDesiredCountFunctionRole.Arn'
++      Runtime: nodejs20.x
++  DynamicDesiredCountFunctionRole:
++    Metadata:
++      'aws:copilot:description': "An IAM Role for describing number of running tasks in your ECS service"
++    Type: AWS::IAM::Role
++    Properties:
++      AssumeRolePolicyDocument:
++        Version: '2012-10-17'
++        Statement:
++          - Effect: Allow
++            Principal:
++              Service:
++                - lambda.amazonaws.com
++            Action:
++              - sts:AssumeRole
++      Path: /
++      ManagedPolicyArns:
++        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
++      Policies:
++        - PolicyName: "DelegateDesiredCountAccess"
++          PolicyDocument:
++            Version: '2012-10-17'
++            Statement:
++              - Sid: ECS
++                Effect: Allow
++                Action:
++                  - ecs:DescribeServices
++                Resource: "*"
++                Condition:
++                  ArnEquals:
++                    'ecs:cluster':
++                      Fn::Sub:
++                        - arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}
++                        - ClusterName:
++                            Fn::ImportValue: !Sub '${AppName}-${EnvName}-ClusterId'
++              - Sid: ResourceGroups
++                Effect: Allow
++                Action:
++                  - resource-groups:GetResources
++                Resource: "*"
++              - Sid: Tags
++                Effect: Allow
++                Action:
++                  - "tag:GetResources"
++                Resource: "*"
++  AutoScalingRole:
++    Metadata:
++      'aws:copilot:description': 'An IAM role for container auto scaling'
++    Type: AWS::IAM::Role
++    Properties:
++      AssumeRolePolicyDocument:
++        Version: '2012-10-17'
++        Statement:
++          - Effect: Allow
++            Principal:
++              Service: ecs-tasks.amazonaws.com
++            Action: 'sts:AssumeRole'
++      ManagedPolicyArns:
++        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole'
++  AutoScalingTarget:
++    Metadata:
++      'aws:copilot:description': "An autoscaling target to scale your service's desired count"
++    Type: AWS::ApplicationAutoScaling::ScalableTarget
++    Properties:
++      MinCapacity: 1
++      MaxCapacity: 2
++      ResourceId:
++        Fn::Join:
++          - '/'
++          - - 'service'
++            - Fn::ImportValue: !Sub '${AppName}-${EnvName}-ClusterId'
++            - !GetAtt Service.Name
++      ScalableDimension: ecs:service:DesiredCount
++      ServiceNamespace: ecs
++      RoleARN: !GetAtt AutoScalingRole.Arn
++  AutoScalingPolicyECSServiceAverageCPUUtilization:
++    Type: AWS::ApplicationAutoScaling::ScalingPolicy
++    Properties:
++      PolicyName: !Join ['-', [!Ref WorkloadName, ECSServiceAverageCPUUtilization, ScalingPolicy]]
++      PolicyType: TargetTrackingScaling
++      ScalingTargetId: !Ref AutoScalingTarget
++      TargetTrackingScalingPolicyConfiguration:
++        PredefinedMetricSpecification:
++          PredefinedMetricType: ECSServiceAverageCPUUtilization
++        ScaleInCooldown: 0
++        ScaleOutCooldown: 0
++        TargetValue: 70
++  AutoScalingPolicyECSServiceAverageMemoryUtilization:
++    Type: AWS::ApplicationAutoScaling::ScalingPolicy
++    Properties:
++      PolicyName: !Join ['-', [!Ref WorkloadName, ECSServiceAverageMemoryUtilization, ScalingPolicy]]
++      PolicyType: TargetTrackingScaling
++      ScalingTargetId: !Ref AutoScalingTarget
++      TargetTrackingScalingPolicyConfiguration:
++        PredefinedMetricSpecification:
++          PredefinedMetricType: ECSServiceAverageMemoryUtilization
++        ScaleInCooldown: 0
++        ScaleOutCooldown: 0
++        TargetValue: 95
++  CPURollbackAlarm:
++    Metadata:
++      'aws:copilot:description': "A CloudWatch alarm associated with CPU utilization for deployment rollbacks"
++    Type: AWS::CloudWatch::Alarm
++    Properties:
++      AlarmDescription: "Roll back ECS service if CPU utilization is greater than or equal to 70% twice in 3 minutes."
++      AlarmName: youtube-rag-chat-staging-api-CopilotRollbackCPUAlarm
++      Namespace: 'AWS/ECS'
++      Dimensions:
++        - Name: ClusterName
++          Value:
++            Fn::ImportValue: !Sub '${AppName}-${EnvName}-ClusterId'
++        - Name: ServiceName
++          Value: !Select [2, !Split ["/", !Ref Service]]
++      MetricName: 'CPUUtilization'
++      ComparisonOperator: 'GreaterThanOrEqualToThreshold'
++      DatapointsToAlarm: 2
++      EvaluationPeriods: 3
++      Period: 60
++      Statistic: 'Average'
++      Threshold: 70
++      Unit: 'Percent'
++  MemoryRollbackAlarm:
++    Metadata:
++      'aws:copilot:description': "A CloudWatch alarm associated with memory utilization for deployment rollbacks"
++    Type: AWS::CloudWatch::Alarm
++    Properties:
++      AlarmDescription: "Roll back ECS service if memory utilization is greater than or equal to 95% twice in 3 minutes."
++      AlarmName: youtube-rag-chat-staging-api-CopilotRollbackMemAlarm
++      Namespace: 'AWS/ECS'
++      Dimensions:
++        - Name: ClusterName
++          Value:
++            Fn::ImportValue: !Sub '${AppName}-${EnvName}-ClusterId'
++        - Name: ServiceName
++          Value: !Select [2, !Split ["/", !Ref Service]]
++      MetricName: 'MemoryUtilization'
++      ComparisonOperator: 'GreaterThanOrEqualToThreshold'
++      DatapointsToAlarm: 2
++      EvaluationPeriods: 3
++      Period: 60
++      Statistic: 'Average'
++      Threshold: 95
++      Unit: 'Percent'
++  EnvControllerAction:
++    Metadata:
++      'aws:copilot:description': "Update your environment's shared resources"
++    Type: Custom::EnvControllerFunction
++    Properties:
++      ServiceToken: !GetAtt EnvControllerFunction.Arn
++      Workload: !Ref WorkloadName
++      EnvStack: !Sub '${AppName}-${EnvName}'
++      Parameters: [ALBWorkloads, Aliases]
++      EnvVersion: v1.34.1
++  EnvControllerFunction:
++    Type: AWS::Lambda::Function
++    Properties:
++      Code:
++        S3Bucket: stackset-youtube-rag-chat-pipelinebuiltartifactbuc-dj0prcniywcp
++        S3Key: manual/scripts/custom-resources/envcontrollerfunction/5cdb2f63626cf4ce22c15032e1f5842c8a16567b342c66ff137188f19c2cebb7.zip
++      Handler: "index.handler"
++      Timeout: 900
++      MemorySize: 512
++      Role: !GetAtt 'EnvControllerRole.Arn'
++      Runtime: nodejs20.x
++  EnvControllerRole:
++    Metadata:
++      'aws:copilot:description': "An IAM role to update your environment stack"
++    Type: AWS::IAM::Role
++    Properties:
++      AssumeRolePolicyDocument:
++        Version: '2012-10-17'
++        Statement:
++          - Effect: Allow
++            Principal:
++              Service:
++                - lambda.amazonaws.com
++            Action:
++              - sts:AssumeRole
++      Path: /
++      Policies:
++        - PolicyName: "EnvControllerStackUpdate"
++          PolicyDocument:
++            Version: '2012-10-17'
++            Statement:
++              - Effect: Allow
++                Action:
++                  - cloudformation:DescribeStacks
++                  - cloudformation:UpdateStack
++                Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-${EnvName}/*'
++                Condition:
++                  StringEquals:
++                    'cloudformation:ResourceTag/copilot-application': !Sub '${AppName}'
++                    'cloudformation:ResourceTag/copilot-environment': !Sub '${EnvName}'
++        - PolicyName: "EnvControllerRolePass"
++          PolicyDocument:
++            Version: '2012-10-17'
++            Statement:
++              - Effect: Allow
++                Action:
++                  - iam:PassRole
++                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppName}-${EnvName}-CFNExecutionRole'
++                Condition:
++                  StringEquals:
++                    'iam:ResourceTag/copilot-application': !Sub '${AppName}'
++                    'iam:ResourceTag/copilot-environment': !Sub '${EnvName}'
++      ManagedPolicyArns:
++        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
++  Service:
++    Metadata:
++      'aws:copilot:description': 'An ECS service to run and maintain your tasks in the environment cluster'
++    Type: AWS::ECS::Service
++    DependsOn:
++      - HTTPListenerRule
++    Properties:
++      PlatformVersion: LATEST
++      Cluster:
++        Fn::ImportValue: !Sub '${AppName}-${EnvName}-ClusterId'
++      TaskDefinition: !Ref TaskDefinition
++      DesiredCount: !GetAtt DynamicDesiredCountAction.DesiredCount
++      DeploymentConfiguration:
++        DeploymentCircuitBreaker:
++          Enable: true
++          Rollback: true
++        MinimumHealthyPercent: 100
++        MaximumPercent: 200
++        Alarms:
++          AlarmNames:
++            - youtube-rag-chat-staging-api-CopilotRollbackCPUAlarm
++            - youtube-rag-chat-staging-api-CopilotRollbackMemAlarm
++          Enable: true
++          Rollback: true
++      PropagateTags: SERVICE
++      EnableExecuteCommand: true
++      LaunchType: FARGATE
++      ServiceConnectConfiguration:
++        Enabled: True
++        Namespace: staging.youtube-rag-chat.local
++        LogConfiguration:
++          LogDriver: awslogs
++          Options:
++            awslogs-region: !Ref AWS::Region
++            awslogs-group: !Ref LogGroup
++            awslogs-stream-prefix: copilot
++        Services:
++          - PortName: target
++            # Avoid using the same service with Service Discovery in a namespace.
++            DiscoveryName: !Join ["-", [!Ref WorkloadName, "sc"]]
++            ClientAliases:
++              - Port: !Ref TargetPort
++                DnsName: !Ref WorkloadName
++      NetworkConfiguration:
++        AwsvpcConfiguration:
++          AssignPublicIp: ENABLED
++          Subnets:
++            Fn::Split:
++              - ','
++              - Fn::ImportValue: !Sub '${AppName}-${EnvName}-PublicSubnets'
++          SecurityGroups:
++            - Fn::ImportValue: !Sub '${AppName}-${EnvName}-EnvironmentSecurityGroup'
++      # This may need to be adjusted if the container takes a while to start up
++      HealthCheckGracePeriodSeconds: 40
++      LoadBalancers:
++        - ContainerName: api
++          ContainerPort: 8000
++          TargetGroupArn: !Ref TargetGroup
++      ServiceRegistries:
++        - RegistryArn: !GetAtt DiscoveryService.Arn
++          Port: !Ref TargetPort
++  TargetGroup:
++    Metadata:
++      'aws:copilot:description': "A target group to connect the load balancer to your service on port 8000"
++    Type: AWS::ElasticLoadBalancingV2::TargetGroup
++    Properties:
++      HealthCheckPath: /health # Default is '/'.
++      HealthyThresholdCount: 2
++      UnhealthyThresholdCount: 3
++      HealthCheckIntervalSeconds: 10
++      HealthCheckTimeoutSeconds: 5
++      Port: 8000
++      Protocol: HTTP
++      TargetGroupAttributes:
++        - Key: deregistration_delay.timeout_seconds
++          Value: 60 # ECS Default is 300; Copilot default is 60.
++        - Key: stickiness.enabled
++          Value: false
++      TargetType: ip
++      VpcId:
++        Fn::ImportValue: !Sub "${AppName}-${EnvName}-VpcId"
++  RulePriorityFunction:
++    Type: AWS::Lambda::Function
++    Properties:
++      Code:
++        S3Bucket: stackset-youtube-rag-chat-pipelinebuiltartifactbuc-dj0prcniywcp
++        S3Key: manual/scripts/custom-resources/rulepriorityfunction/e718bfc34436d66c748c932859ef8383fda896513ed87ba4197c4ec1e0728af6.zip
++      Handler: "index.nextAvailableRulePriorityHandler"
++      Timeout: 600
++      MemorySize: 512
++      Role: !GetAtt "RulePriorityFunctionRole.Arn"
++      Runtime: nodejs20.x
++  RulePriorityFunctionRole:
++    Metadata:
++      'aws:copilot:description': "An IAM Role to describe load balancer rules for assigning a priority"
++    Type: AWS::IAM::Role
++    Properties:
++      AssumeRolePolicyDocument:
++        Version: '2012-10-17'
++        Statement:
++          - Effect: Allow
++            Principal:
++              Service:
++                - lambda.amazonaws.com
++            Action:
++              - sts:AssumeRole
++      Path: /
++      ManagedPolicyArns:
++        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
++      Policies:
++        - PolicyName: "RulePriorityGeneratorAccess"
++          PolicyDocument:
++            Version: '2012-10-17'
++            Statement:
++              - Effect: Allow
++                Action:
++                  - elasticloadbalancing:DescribeRules
++                Resource: "*"
++  HTTPRulePriorityAction:
++    Metadata:
++      'aws:copilot:description': 'A custom resource assigning priority for HTTP listener rules'
++    Type: Custom::RulePriorityFunction
++    Properties:
++      ServiceToken: !GetAtt RulePriorityFunction.Arn
++      RulePath: ["/"]
++      ListenerArn: !GetAtt EnvControllerAction.HTTPListenerArn
++  HTTPListenerRule:
++    Metadata:
++      'aws:copilot:description': 'An HTTP listener rule for path `/` that forwards HTTP traffic to your tasks'
++    Type: AWS::ElasticLoadBalancingV2::ListenerRule
++    Properties:
++      Actions:
++        - TargetGroupArn: !Ref TargetGroup
++          Type: forward
++      Conditions:
++        - Field: 'path-pattern'
++          PathPatternConfig:
++            Values:
++              - /*
++      ListenerArn: !GetAtt EnvControllerAction.HTTPListenerArn
++      Priority: !GetAtt HTTPRulePriorityAction.Priority
++  AddonsStack:
++    Metadata:
++      'aws:copilot:description': 'An Addons CloudFormation Stack for your additional AWS resources'
++    Type: AWS::CloudFormation::Stack
++    DependsOn: EnvControllerAction
++    Condition: HasAddons
++    Properties:
++      Parameters:
++        App: !Ref AppName
++        Env: !Ref EnvName
++        Name: !Ref WorkloadName
++      TemplateURL: !Ref AddonsTemplateURL
++Outputs:
++  DiscoveryServiceARN:
++    Description: ARN of the Discovery Service.
++    Value: !GetAtt DiscoveryService.Arn
++    Export:
++      Name: !Sub ${AWS::StackName}-DiscoveryServiceARN

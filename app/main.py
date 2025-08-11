@@ -80,20 +80,34 @@ def get_past_conversations(
     final_response = PreviousConversationsResponse(conversations=conversation_items)
     return final_response
 
+# @app.get("/health", status_code=200)
+# def health_check(db: Session = Depends(get_session)):
+#     # """A simple endpoint to confirm the service is running."""
+#     # return {"status": "ok", "message": "Backend service is alive!"}
+#     """Comprehensive health check with DB verification"""
+#     try:
+#         db.exec(text("SELECT 1"))
+#         db_status= "connected"
+#     except Exception as e:
+#         db_status = f"unavailable: {str(e)}"
+#     return {
+#         "status": "ok",
+#         "services": {"database": db_status}
+#     }
+
 @app.get("/health", status_code=200)
-def health_check(db: Session = Depends(get_session)):
+def health_check():
     # """A simple endpoint to confirm the service is running."""
-    # return {"status": "ok", "message": "Backend service is alive!"}
-    """Comprehensive health check with DB verification"""
+    return {"status": "ok"}
+
+@app.get("/db_health", status_code=200)
+def db_health_check(db: Session = Depends(get_session)):
     try:
         db.exec(text("SELECT 1"))
         db_status= "connected"
     except Exception as e:
         db_status = f"unavailable: {str(e)}"
-    return {
-        "status": "ok",
-        "services": {"database": db_status}
-    }
+    return {"db_status": db_status}
 
 if __name__ == "__main__":
     import uvicorn

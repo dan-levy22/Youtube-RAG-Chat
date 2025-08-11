@@ -30,6 +30,9 @@ COPY ./app /code/app
 COPY ./config /code/config
 COPY ./shared /code/shared
 COPY ./db /code/db
+COPY ./create_tables.py /code/db/create_tables.py
+
+
 
 EXPOSE 8000
 
@@ -37,7 +40,8 @@ EXPOSE 8000
 # CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "-b", "0.0.0.0:8000"]
 
 # Test using uvicorn first
-CMD ["sh", "-c", "echo 'Waiting for secret initialization...'"; "sleep 15"; "uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+# CMD ["sh", "-c", "echo 'Waiting for secret initialization...'"; "sleep 15"; "uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh","-c","echo 'Waiting for secret initialization…' && sleep 10 && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
 
 
 # --------------- Stage 3: Development ------------------

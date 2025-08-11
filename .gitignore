@@ -64,3 +64,5 @@ debug_settings.py
 # Print codebase
 print_files.py
 python_repo_for_llm.txt
+
+out/
