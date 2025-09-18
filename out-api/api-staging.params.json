@@ -1,0 +1,26 @@
+{
+  "Parameters": {
+    "AddonsTemplateURL": "",
+    "AppName": "youtube-rag-chat",
+    "ArtifactKeyARN": "arn:aws:kms:eu-west-2:253108853617:key/19b144f0-ed4c-4c4c-a7bd-2477e79c2d7e",
+    "ContainerImage": "",
+    "ContainerPort": "8000",
+    "DNSDelegated": "false",
+    "EnvFileARN": "",
+    "EnvName": "staging",
+    "HTTPSEnabled": "false",
+    "LogRetention": "30",
+    "RulePath": "/api",
+    "TargetContainer": "api",
+    "TargetPort": "8000",
+    "TaskCPU": "256",
+    "TaskCount": "1",
+    "TaskMemory": "512",
+    "WorkloadName": "api"
+  },
+  "Tags": {
+    "copilot-application": "youtube-rag-chat",
+    "copilot-environment": "staging",
+    "copilot-service": "api"
+  }
+}

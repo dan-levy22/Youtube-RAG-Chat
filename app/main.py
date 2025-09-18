@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, SQLModel
+from sqlalchemy import text
 
 from app.api.routers.chat import router as chat_router
 from app.api.routers.session import router as session_router
@@ -23,17 +24,31 @@ from db.session import engine, get_session
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Before startup:
-    SQLModel.metadata.create_all(engine) # Create all tables
+     # This code runs on startup
+    print("--- Application starting up... ---")
+
+    # No database operations here!
+    
     yield
-    # After startup:
+    
+    # This code runs on shutdown
+    print("--- Application shutting down... ---")
+
+    # Dispose database engine if it exists
+    if engine is not None:
+        logger.info("Disposing database engine...")
+        engine.dispose()
+        logger.info("Database engine disposed")
 
 
 app = FastAPI(
     title="Youtube RAG Chat",
     version= "0.1.0",
     lifespan=lifespan, 
-    debug=True
+    debug=True,
+    docs_url="/api/docs",              # serve Swagger UI at /api/docs
+    openapi_url="/api/openapi.json",   # OpenAPI schema under /api
+    redoc_url=None
 )
 
 # configure_logging(level=logging.DEBUG)
@@ -68,6 +83,39 @@ def get_past_conversations(
     final_response = PreviousConversationsResponse(conversations=conversation_items)
     return final_response
 
+# @app.get("/health", status_code=200)
+# def health_check(db: Session = Depends(get_session)):
+#     # """A simple endpoint to confirm the service is running."""
+#     # return {"status": "ok", "message": "Backend service is alive!"}
+#     """Comprehensive health check with DB verification"""
+#     try:
+#         db.exec(text("SELECT 1"))
+#         db_status= "connected"
+#     except Exception as e:
+#         db_status = f"unavailable: {str(e)}"
+#     return {
+#         "status": "ok",
+#         "services": {"database": db_status}
+#     }
+
+@app.get("/health", status_code=200)
+def health_check():
+    # """A simple endpoint to confirm the service is running."""
+    return {"status": "ok"}
+
+@app.get("/api/health", status_code=200)
+def health_check_alias():
+    # """A simple endpoint to confirm the service is running."""
+    return {"status": "ok"}
+
+@app.get("/db_health", status_code=200)
+def db_health_check(db: Session = Depends(get_session)):
+    try:
+        db.exec(text("SELECT 1"))
+        db_status= "connected"
+    except Exception as e:
+        db_status = f"unavailable: {str(e)}"
+    return {"db_status": db_status}
 
 if __name__ == "__main__":
     import uvicorn

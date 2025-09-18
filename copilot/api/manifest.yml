@@ -1,0 +1,88 @@
+name: api
+type: Load Balanced Web Service
+
+image:
+  build:
+    dockerfile: app/Dockerfile
+    context: .
+    target: production
+  port: 8000
+
+# If your image supports ARM, uncomment the next line to save costs:
+# platform: linux/arm64
+# Otherwise keep x86_64:
+platform: linux/x86_64
+
+http:
+  path: "/api"
+  healthcheck:
+    path: "/health"        # keep this lightweight (no DB)
+    grace_period: 40s       # bump to 30–60s if your app boots slower
+    interval: 10s
+    timeout: 5s
+    healthy_threshold: 2
+    unhealthy_threshold: 3
+  # redirect_to_https: true  # default is true; keep it that way
+
+cpu: 256
+memory: 512
+
+count:
+  range: 1-2                # min=1 for availability; max=2 for spikes
+  cooldown:
+    in: 60
+    out: 60
+  cpu_percentage: 70
+  memory_percentage: 95
+
+sidecars:
+  chroma:
+    image: chromadb/chroma:latest       # or pin a version you tested
+    port: 8001
+    # The image entrypoint is already "chroma", so pass only subcommand + flags:
+    command: ["run","--host","0.0.0.0","--port","8001"]  # omit --path to use the image default
+    essential: true
+
+exec: true
+network:
+  connect: true             # service-to-service (Cloud Map / Service Connect)
+
+deployment:
+  circuit_breaker:
+    enable: true
+    rollback: true
+  rollback_alarms:          # keep if you’ve verified these names in CloudWatch
+    cpu_utilization: 70
+    memory_utilization: 95
+
+variables:
+  DB_HOST:
+    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBHost
+  DB_PORT:
+    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBPort
+  DB_NAME:
+    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBName
+  CHROMA_HOST: localhost
+  CHROMA_PORT: 8001
+
+secrets:
+  DB_USER:
+    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBUserSecretRef
+  DB_PASSWORD:
+    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-DBPasswordSecretRef
+  
+  GEMINI_API_KEY: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/GEMINI_API_KEY
+  PROXY_URL: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/PROXY_URL
+
+# Per‑environment overrides (optional)
+# environments:
+#   staging:
+#     cpu: 256
+#     memory: 512
+#     count:
+#       range: 1-1
+#   prod:
+#     cpu: 512
+#     memory: 1024
+#     count:
+#       range: 2-4

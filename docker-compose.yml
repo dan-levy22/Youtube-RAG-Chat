@@ -1,54 +1,63 @@
+# docker-compose.yml (Production Base)
+
 services:
-  # FastAPI Backend Service
   backend:
     build:
-      context: . # Use the project root (where docker-compose.yml lives) as the context
-      dockerfile: ./app/Dockerfile # Path to the backend's Dockerfile
-    env_file:
-      - .env  #
-    container_name: backend
-    ports:
-      - "8000:8000" # Map host port 8000 to container port 8000
-    environment:
-      # Pass the ChromaDB hostname & port to your backend- rest of variables taken from .env defaults
-      CHROMA_HOST: chromadb
-      CHROMA_PORT: 8000 # The internal port for Chroma
-    depends_on:
-      - chromadb # Ensures chromadb starts before the backend
-    volumes:
-      - ./app:/code/app            # Mounts your local backend code into the container for live-reloading
-      - ./config:/code/config  # Mounts the shared config into the backend
-      - ./data:/code/data     # Mounts the sqlite db to the backend
-      - ./shared:/code/shared
-    
-  # Streamlit Frontend Service
-  frontend:
-    build: 
-      context: . 
-      dockerfile: ./frontend/Dockerfile # Path to the frontend's Dockerfile
-    env_file:
+      context: .
+      dockerfile: ./app/Dockerfile
+      target: production
+    env_file: # PHASE 2 (Service-level)
       - .env
+    container_name: backend
+    # Note: No ports are exposed to the host by default in production.
+    # This would typically be handled by a reverse proxy like Nginx.
+    environment:
+      - EXECUTION_ENVIRONMENT=docker
+      - DB_HOST=db
+      # - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # - PROXY_URL=${PROXY_URL}
+      # - CHROMA_HOST=chromadb
+    depends_on:
+      db:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
     container_name: frontend
     ports:
-      - "8501:8501" # Map host port 8501 to container port 8501
+      - "8501:8501" # We keep this port as it's the main entrypoint
     environment:
-      # Tell the frontend where the backend API is
-      BACKEND_URL: http://backend:8000
+      - BACKEND_URL=http://backend:8000
     depends_on:
-      - backend # Ensures backend starts before the frontend
-    volumes:
-      - ./frontend:/code/frontend # Mounts your local frontend code for live-reloading
-      - ./config:/code/frontend/config  # Mounts the shared config into the frontend
-      - ./shared:/code/frontend/shared  # Mounts the shared pydantic models into the frontend
+      - backend
 
-  # ChromaDB Service
   chromadb:
-    image: chromadb/chroma # Use the official ChromaDB image
+    image: chromadb/chroma
     container_name: chromadb
-    ports:
-      - "8001:8000" # Map host port 8001 to Chroma's default port 8000
     volumes:
       - chroma_data:/chroma/chroma
 
+  db:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    env_file: .env
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
-  chroma_data: # Defines the named volume for persistence
+  chroma_data:
+  postgres_data:

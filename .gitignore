@@ -7,6 +7,7 @@
 
 # vector db
 chess_chroma_db/
+*.sqlite3
 
 transcript_cache/
 summary_cache/
@@ -14,11 +15,15 @@ summary_cache/
 # trialling files
 chromadb-test.ipynb
 youtube_RAG.ipynb
+random_test_scripts/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Binary files
+*.bin
 
 
 # log files
@@ -33,3 +38,32 @@ __pycache__/
 
 # Secret environment variables
 .env
+.env.local
+
+# Demo data backup
+demo_data_backup.sql
+
+# Updated demo data backup
+rds_backup.sql
+
+# Original docker-compose
+docker-compose-OG.yml
+
+# YT transcript loader test scripts
+test_community_loader.py
+test_direct_dlp.py
+test_loader.py
+test_youtube_transcript.py
+check_config.py
+
+# Git diff
+broken-commit.txt
+
+# Test scripts
+debug_settings.py
+
+# Print codebase
+print_files.py
+python_repo_for_llm.txt
+
+out/

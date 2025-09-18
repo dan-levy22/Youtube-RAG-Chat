@@ -1,0 +1,126 @@
+# Environment-level RDS Postgres (free-tier friendly)
+# Deploy with: copilot env deploy -n <env>
+
+Parameters:
+  App:
+    Type: String
+    Description: Copilot application name
+  Env:
+    Type: String
+    Description: Copilot environment name
+
+Mappings: {}
+Conditions:
+  IsProd: !Equals [!Ref Env, "prod"]
+
+Resources:
+  # Security group on the DB that only allows traffic from the Environment SG
+  DBInstanceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "RDS access for ${App}/${Env} services"
+      VpcId:
+        Fn::ImportValue: !Sub "${App}-${Env}-VpcId"
+      Tags:
+        - Key: copilot-application
+          Value: !Ref App
+        - Key: copilot-environment
+          Value: !Ref Env
+
+  DBIngressFromEnvSG:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DBInstanceSG
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId:
+        Fn::ImportValue: !Sub "${App}-${Env}-EnvironmentSecurityGroup"
+
+  # Subnet group built from the Copilot environment's private subnets
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "Private subnets for ${App}/${Env} RDS"
+      SubnetIds:
+        Fn::Split:
+          - ","
+          - Fn::ImportValue: !Sub "${App}-${Env}-PrivateSubnets"
+      Tags:
+        - Key: copilot-application
+          Value: !Ref App
+        - Key: copilot-environment
+          Value: !Ref Env
+
+  # Credentials secret (username fixed; password generated)
+  DBCredentials:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${App}-${Env}-rds-credentials"
+      Description: !Sub "Master credentials for ${App}/${Env} Postgres"
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"appuser"}'
+        GenerateStringKey: password
+        ExcludePunctuation: true
+      Tags:
+        - Key: copilot-application
+          Value: !Ref App
+        - Key: copilot-environment
+          Value: !Ref Env
+
+  # Small, single-AZ Postgres instance
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${App}-${Env}-pg"
+      Engine: postgres
+      # EngineVersion: '15'          # (optional: pin a version)
+      DBInstanceClass: db.t4g.micro  # free-tier–sized
+      AllocatedStorage: 20           # free-tier storage size
+      StorageType: gp2
+      PubliclyAccessible: false
+      MultiAZ: false
+      AutoMinorVersionUpgrade: true
+      DeletionProtection: !If [IsProd, true, false]
+      BackupRetentionPeriod: !If [IsProd, 7, 1]
+      VPCSecurityGroups:
+        - !Ref DBInstanceSG
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      # Create an initial DB schema name you’ll export as DB_NAME:
+      DBName: rag_db
+      MasterUsername: !Sub '{{resolve:secretsmanager:${DBCredentials}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DBCredentials}:SecretString:password}}'
+      CopyTagsToSnapshot: true
+      Tags:
+        - Key: copilot-application
+          Value: !Ref App
+        - Key: copilot-environment
+          Value: !Ref Env
+
+Outputs:
+  # Values you’ll import in service manifests via "from_cfn"
+  DBHost:
+    Value: !GetAtt DBInstance.Endpoint.Address
+    Export:
+      Name: !Sub "${App}-${Env}-DBHost"
+
+  DBPort:
+    Value: !GetAtt DBInstance.Endpoint.Port
+    Export:
+      Name: !Sub "${App}-${Env}-DBPort"
+
+  DBName:
+    Value: rag_db
+    Export:
+      Name: !Sub "${App}-${Env}-DBName"
+
+  # Pre-baked secret references that target JSON keys (works nicely with "secrets.from_cfn")
+  DBUserSecretRef:
+    Value: !Sub "${DBCredentials}:username::"
+    Export:
+      Name: !Sub "${App}-${Env}-DBUserSecretRef"
+
+  DBPasswordSecretRef:
+    Value: !Sub "${DBCredentials}:password::"
+    Export:
+      Name: !Sub "${App}-${Env}-DBPasswordSecretRef"

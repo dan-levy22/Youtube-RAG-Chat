@@ -16,5 +16,6 @@ venv/
 .idea/
 .vscode/
 
-# Ignore environmen variabels
+# Ignore environment variable files
 .env
+.env.local
