@@ -45,7 +45,10 @@ app = FastAPI(
     title="Youtube RAG Chat",
     version= "0.1.0",
     lifespan=lifespan, 
-    debug=True
+    debug=True,
+    docs_url="/api/docs",              # serve Swagger UI at /api/docs
+    openapi_url="/api/openapi.json",   # OpenAPI schema under /api
+    redoc_url=None
 )
 
 # configure_logging(level=logging.DEBUG)
@@ -97,6 +100,11 @@ def get_past_conversations(
 
 @app.get("/health", status_code=200)
 def health_check():
+    # """A simple endpoint to confirm the service is running."""
+    return {"status": "ok"}
+
+@app.get("/api/health", status_code=200)
+def health_check_alias():
     # """A simple endpoint to confirm the service is running."""
     return {"status": "ok"}
 

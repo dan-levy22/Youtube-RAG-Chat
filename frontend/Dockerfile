@@ -1,11 +1,13 @@
 # --------- Stage 1: "Base" ----------
-FROM python:3.12-slim as base
+FROM python:3.12-slim AS base
 
 WORKDIR /code
 
 # Set env vars for clean logs
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+# Add this so Python can import top-level packages (config/, shared/, etc.)
+ENV PYTHONPATH=/code
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # Install uv
 RUN pip install uv
@@ -13,13 +15,14 @@ RUN pip install uv
 # Copy only the requirements file first to leverage Docker's layer caching
 COPY ./frontend/requirements.txt /code/requirements.txt
 
+# Install dependencies
 RUN uv pip install --no-cache-dir --system -r requirements.txt
 
 
 # --------- Stage 2: "Production" ----------
 # Installs all dependencies needed for local dev and for testing
 # By inheriting from 'base', we already have Python, uv, and all dependencies installed.
-FROM base as production
+FROM base AS production
 
 # Copy only the frontend application code into the image.
 COPY ./frontend /code/frontend
@@ -29,11 +32,11 @@ COPY ./shared /code/shared
 EXPOSE 8501
 
 #  The default CMD for this stage is for local development
-CMD ["streamlit", "run", "frontend/frontend.py"]
+CMD ["streamlit", "run", "frontend/frontend.py", "--server.address=0.0.0.0", "--server.port=8501", "--browser.gatherUsageStats=false"]
 
 
 # ----------------- Stage 3: Development ----------------
-FROM base as development 
+FROM base AS development 
 
 # Note: relevant code is accessed through volumes in docker-compose 
 

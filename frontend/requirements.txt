@@ -103,3 +103,5 @@ tzdata==2025.2
     # via pandas
 urllib3==2.4.0
     # via requests
+pydantic-settings>=2.2,<3
+python-dotenv>=1.0   # only if you use .env files

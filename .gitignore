@@ -38,6 +38,7 @@ __pycache__/
 
 # Secret environment variables
 .env
+.env.local
 
 # Demo data backup
 demo_data_backup.sql

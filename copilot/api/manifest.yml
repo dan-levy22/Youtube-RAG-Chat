@@ -14,7 +14,7 @@ image:
 platform: linux/x86_64
 
 http:
-  path: "/"
+  path: "/api"
   healthcheck:
     path: "/health"        # keep this lightweight (no DB)
     grace_period: 40s       # bump to 30–60s if your app boots slower
@@ -35,6 +35,13 @@ count:
   cpu_percentage: 70
   memory_percentage: 95
 
+sidecars:
+  chroma:
+    image: chromadb/chroma:latest       # or pin a version you tested
+    port: 8001
+    # The image entrypoint is already "chroma", so pass only subcommand + flags:
+    command: ["run","--host","0.0.0.0","--port","8001"]  # omit --path to use the image default
+    essential: true
 
 exec: true
 network:
